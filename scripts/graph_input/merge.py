@@ -155,7 +155,7 @@ def compute_f1(nl_norm_set: set, graph_norm_set: set) -> dict:
 def _llm_call(system_prompt: str, user_content: str, model: str) -> dict:
     import sys as _sys
     _sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-    from llm_client import chat, resolve_provider
+    from llm_client import chat, resolve_provider, extract_json_text
 
     messages = [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_content}]
     provider = resolve_provider()
@@ -164,11 +164,7 @@ def _llm_call(system_prompt: str, user_content: str, model: str) -> dict:
         model = None
     temperature = None if model in NO_TEMPERATURE_ZERO_MODELS else 0
     raw_text = chat(messages, provider=provider, model=model, temperature=temperature)
-    if raw_text.startswith("```"):
-        raw_text = raw_text.strip("`")
-        if raw_text.startswith("json"):
-            raw_text = raw_text[4:].strip()
-    return json.loads(raw_text)
+    return json.loads(extract_json_text(raw_text))
 
 
 # ---------------------------------------------------------------------------

@@ -29,7 +29,7 @@ load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 MODEL       = "ft:gpt-4.1-2025-04-14:personal:filterfinetune80:DZeuAI1R"
 TEMPERATURE = 0.2
 
-from llm_client import chat, resolve_provider
+from llm_client import chat, resolve_provider, extract_json_text
 
 # MODEL above is an OpenAI fine-tune id; other providers use their configured model.
 WHATIF_MODELS = {"openai": MODEL, "azure": None, "local": None}
@@ -115,11 +115,8 @@ def generate_whatif(
         model=WHATIF_MODELS.get(provider),
     )
 
-    if raw.startswith("```"):
-        raw = re.sub(r"```(?:json)?", "", raw).replace("```", "").strip()
-
     try:
-        return json.loads(raw)
+        return json.loads(extract_json_text(raw))
     except json.JSONDecodeError as e:
         raise ValueError(
             f"LLM output could not be parsed as JSON: {e}\n\nRaw output:\n{raw}"

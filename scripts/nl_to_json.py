@@ -23,7 +23,7 @@ from dotenv import load_dotenv
 
 from prompts import SYSTEM_INSTRUCTIONS
 from schema  import SCHEMA_EXAMPLE
-from llm_client import chat, active_model
+from llm_client import chat, active_model, extract_json_text
 
 load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
@@ -128,11 +128,10 @@ def generate_json(
     )
 
     # ── Parse JSON ─────────────────────────────────────────
-    if raw.startswith("```"):
-        raw = re.sub(r"```(?:json)?", "", raw).replace("```", "").strip()
+    cleaned = extract_json_text(raw)
 
     try:
-        return json.loads(raw)
+        return json.loads(cleaned)
     except json.JSONDecodeError as e:
         raise ValueError(
             f"LLM output could not be parsed as JSON: {e}\n\nRaw output:\n{raw}"

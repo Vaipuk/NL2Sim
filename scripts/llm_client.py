@@ -27,6 +27,7 @@ Usage:
 """
 
 import os
+import re
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -145,6 +146,27 @@ def chat(
     return (response.choices[0].message.content or "").strip()
 
 
+def extract_json_text(raw: str) -> str:
+    """
+    Pull the JSON out of a model reply.
+
+    Reasoning models (Qwen3, DeepSeek-R1, ...) emit a <think>...</think>
+    block before the answer, and most models like to wrap JSON in markdown
+    fences. Strip both, then fall back to the outermost {...} span so a
+    stray sentence either side does not break parsing.
+    """
+    text = re.sub(r"<think>.*?</think>", "", raw, flags=re.DOTALL)
+    # an unterminated block means the reply was cut off mid-reasoning
+    text = re.sub(r"^.*?</think>", "", text, flags=re.DOTALL)
+    text = re.sub(r"```(?:json)?", "", text).replace("```", "").strip()
+
+    if not text.startswith("{"):
+        start, end = text.find("{"), text.rfind("}")
+        if start != -1 and end > start:
+            text = text[start : end + 1]
+    return text.strip()
+
+
 def active_model(provider: str = None, use_azure: bool = False) -> str:
     """Model name for the selected provider, for logging. Never raises on an unset key."""
     try:
@@ -165,4 +187,19 @@ if __name__ == "__main__":
     except ValueError:
         pass
     print("provider selection OK")
+
+    # Reply shapes seen from real models.
+    import json as _json
+
+    shapes = {
+        "think block":        '<think>\nreasoning {not json}\n</think>\n{"a": 1}',
+        "fence":              '```json\n{"a": 1}\n```',
+        "think + fence":      '<think>x</think>\n```json\n{"a": 1}\n```',
+        "unterminated think": '<think>\ncut off\n</think>{"a": 1}',
+        "surrounding prose":  'Here you go:\n{"a": 1}\nHope that helps!',
+        "bare":               '{"a": 1}',
+    }
+    for label, raw in shapes.items():
+        assert _json.loads(extract_json_text(raw)) == {"a": 1}, label
+    print(f"json extraction OK ({len(shapes)} reply shapes)")
     print("active:", active_model())
