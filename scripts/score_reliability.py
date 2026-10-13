@@ -47,48 +47,25 @@ for pkg in ["punkt", "punkt_tab", "averaged_perceptron_tagger",
 # API clients
 # ============================================================
 
-_openai_client = None
-_azure_client  = None
-
-
-def _get_client() -> OpenAI:
-    global _openai_client
-    if _openai_client is None:
-        api_key = os.environ.get("OPENAI_API_KEY", "")
-        if not api_key:
-            raise EnvironmentError(
-                "OPENAI_API_KEY is not set. "
-                "Add it to your .env file or export it in your terminal."
-            )
-        _openai_client = OpenAI(api_key=api_key)
-    return _openai_client
-
-
-def _get_azure_client():
-    global _azure_client
-    if _azure_client is None:
-        from openai import AzureOpenAI
-        api_key  = os.environ.get("AZURE_OPENAI_API_KEY", "")
-        endpoint = os.environ.get("AZURE_OPENAI_ENDPOINT", "")
-        version  = os.environ.get("AZURE_OPENAI_API_VERSION", "2024-10-21")
-        if not api_key or not endpoint:
-            raise EnvironmentError(
-                "AZURE_OPENAI_API_KEY and AZURE_OPENAI_ENDPOINT must be set in your .env file."
-            )
-        _azure_client = AzureOpenAI(
-            api_key=api_key,
-            azure_endpoint=endpoint,
-            api_version=version,
-        )
-    return _azure_client
+from llm_client import chat, resolve_provider
 
 
 # ============================================================
 # Reconstruction model config
+#
+# Reconstruction wants a general model, not the fine-tuned one -- the
+# fine-tune only knows description -> JSON, not the reverse. For a local
+# provider there is just the one served model, so no override is needed.
 # ============================================================
 
 OPENAI_RECONSTRUCTION_MODEL = "gpt-4o"
 AZURE_RECONSTRUCTION_MODEL  = os.environ.get("AZURE_BASE_MODEL", "gpt-4.1-2025-04-14")
+
+RECONSTRUCTION_MODELS = {
+    "openai": OPENAI_RECONSTRUCTION_MODEL,
+    "azure":  AZURE_RECONSTRUCTION_MODEL,
+    "local":  None,
+}
 
 
 # ============================================================
@@ -291,21 +268,16 @@ def reconstruct_nl(json_data: dict, use_azure: bool = False) -> str:
         )},
     ]
 
-    if use_azure:
-        client = _get_azure_client()
-        model  = AZURE_RECONSTRUCTION_MODEL
-        print(f"  [Azure] Reconstruction model: {model}")
-    else:
-        client = _get_client()
-        model  = OPENAI_RECONSTRUCTION_MODEL
-        print(f"  [OpenAI] Reconstruction model: {model}")
+    provider = resolve_provider(use_azure=use_azure)
+    model    = RECONSTRUCTION_MODELS.get(provider)
+    print(f"  [{provider}] Reconstruction model: {model or 'configured default'}")
 
-    response = client.chat.completions.create(
-        model=model,
+    return chat(
+        messages,
         temperature=0.3,
-        messages=messages,
+        provider=provider,
+        model=model,
     )
-    return response.choices[0].message.content
 
 
 # ============================================================

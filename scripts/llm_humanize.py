@@ -190,16 +190,20 @@ def _local_entity_context(config: dict, location: str) -> dict:
 
 
 def _llm_call(user_payload: dict, model: str) -> str:
-    client = OpenAI()
+    from llm_client import chat, resolve_provider
+
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "user", "content": json.dumps(user_payload, indent=2)},
     ]
-    kwargs = {"model": model, "messages": messages}
-    if model not in NO_TEMPERATURE_ZERO_MODELS:
-        kwargs["temperature"] = 0
-    response = client.chat.completions.create(**kwargs)
-    return response.choices[0].message.content.strip().strip('"')
+    provider = resolve_provider()
+    # `model` names an OpenAI model; other providers use their configured one.
+    if provider != "openai":
+        model = None
+    temperature = None if model in NO_TEMPERATURE_ZERO_MODELS else 0
+    return chat(
+        messages, provider=provider, model=model, temperature=temperature
+    ).strip('"')
 
 
 def generate_question(

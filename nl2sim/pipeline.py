@@ -104,6 +104,8 @@ class Pipeline:
         self.description = description
         self.use_context = use_context
         self.simulate    = simulate
+        # use_azure=True forces Azure; otherwise $LLM_PROVIDER picks the
+        # backend (openai | azure | local), defaulting to openai.
         self.use_azure   = use_azure
 
         # ── output directory ───────────────────────────────

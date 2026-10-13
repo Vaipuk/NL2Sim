@@ -52,19 +52,8 @@ TEMPERATURE = 0.9   # high temperature for varied human-like output
 # Lazy client
 # ============================================================
 
-_client = None
-
-def _get_client() -> OpenAI:
-    global _client
-    if _client is None:
-        api_key = os.environ.get("OPENAI_API_KEY", "")
-        if not api_key:
-            raise EnvironmentError(
-                "OPENAI_API_KEY is not set. "
-                "Add it to your .env file or export it in your terminal."
-            )
-        _client = OpenAI(api_key=api_key)
-    return _client
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from llm_client import chat, resolve_provider  # noqa: E402
 
 # ============================================================
 # Prompt builder
@@ -119,13 +108,14 @@ def generate_nl(
         },
     ]
 
-    response = _get_client().responses.create(
-        model=model,
+    provider = resolve_provider()
+    # `model` names an OpenAI model; other providers use their configured one.
+    return chat(
+        messages,
         temperature=temperature,
-        input=messages,
+        provider=provider,
+        model=model if provider == "openai" else None,
     )
-
-    return response.output_text.strip()
 
 # ============================================================
 # CLI

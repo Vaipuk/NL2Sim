@@ -23,6 +23,7 @@ from dotenv import load_dotenv
 
 from prompts import SYSTEM_INSTRUCTIONS
 from schema  import SCHEMA_EXAMPLE
+from llm_client import chat, active_model
 
 load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
@@ -30,53 +31,7 @@ load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 # ============================================================
 # Model config
 # ============================================================
-OPENAI_MODEL = os.environ["OPENAI_MODEL"]
-AZURE_FINETUNED_MODEL = os.environ.get("AZURE_FINETUNED_MODEL", "")
-AZURE_BASE_MODEL      = os.environ.get("AZURE_BASE_MODEL", "")
-
 TEMPERATURE = 0.3
-
-
-# ============================================================
-# Lazy clients
-# ============================================================
-
-_openai_client = None
-_azure_client  = None
-
-
-def _get_openai_client():
-    global _openai_client
-    if _openai_client is None:
-        from openai import OpenAI
-        api_key = os.environ.get("OPENAI_API_KEY", "")
-        if not api_key:
-            raise EnvironmentError(
-                "OPENAI_API_KEY is not set. "
-                "Add it to your .env file or export it in your terminal."
-            )
-        _openai_client = OpenAI(api_key=api_key)
-    return _openai_client
-
-
-def _get_azure_client():
-    global _azure_client
-    if _azure_client is None:
-        from openai import AzureOpenAI
-        api_key  = os.environ.get("AZURE_OPENAI_API_KEY", "")
-        endpoint = os.environ.get("AZURE_OPENAI_ENDPOINT", "")
-        version  = os.environ.get("AZURE_OPENAI_API_VERSION", "2024-10-21")
-        if not api_key or not endpoint:
-            raise EnvironmentError(
-                "AZURE_OPENAI_API_KEY and AZURE_OPENAI_ENDPOINT must be "
-                "set in your .env file."
-            )
-        _azure_client = AzureOpenAI(
-            api_key=api_key,
-            azure_endpoint=endpoint,
-            api_version=version,
-        )
-    return _azure_client
 
 
 # ============================================================
@@ -141,6 +96,7 @@ def generate_json(
     description: str,
     use_context: bool = True,
     use_azure:   bool = False,
+    provider:    str  = None,
 ) -> dict:
     """
     Convert a natural language supply chain description to JSON.
@@ -153,8 +109,9 @@ def generate_json(
         If True, include SYSTEM_INSTRUCTIONS with full schema rules.
         If False, send no system message (fewer tokens).
     use_azure : bool
-        If True, use Azure OpenAI fine-tuned model.
-        If False (default), use OpenAI fine-tuned model.
+        If True, use Azure. Kept for existing callers; prefer `provider`.
+    provider : str
+        "openai" | "azure" | "local". Defaults to $LLM_PROVIDER, then "openai".
     """
     system_message = SYSTEM_INSTRUCTIONS if use_context else ""
 
@@ -163,30 +120,12 @@ def generate_json(
         {"role": "user",   "content": build_prompt(description)},
     ]
 
-    if use_azure:
-        # ── Azure OpenAI ───────────────────────────────────
-        client = _get_azure_client()
-
-        # Use fine-tuned model if set, otherwise fall back to base model
-        model = AZURE_FINETUNED_MODEL if AZURE_FINETUNED_MODEL else AZURE_BASE_MODEL
-        if not AZURE_FINETUNED_MODEL:
-            print(f"  [INFO] AZURE_FINETUNED_MODEL not set — using base model: {model}")
-
-        response = client.chat.completions.create(
-            model=model,
-            messages=messages,
-            temperature=TEMPERATURE,
-        )
-        raw = response.choices[0].message.content.strip()
-
-    else:
-        # ── OpenAI ─────────────────────────────────────────
-        response = _get_openai_client().responses.create(
-            model=OPENAI_MODEL,
-            temperature=TEMPERATURE,
-            input=messages,
-        )
-        raw = response.output_text.strip()
+    raw = chat(
+        messages,
+        temperature=TEMPERATURE,
+        provider=provider,
+        use_azure=use_azure,
+    )
 
     # ── Parse JSON ─────────────────────────────────────────
     if raw.startswith("```"):
@@ -254,12 +193,7 @@ if __name__ == "__main__":
     use_context = not args.no_context
     use_azure   = args.azure
 
-    model_label = (
-        f"Azure — {AZURE_FINETUNED_MODEL or AZURE_BASE_MODEL}"
-        if use_azure else OPENAI_MODEL
-    )
-
-    print(f"Model       : {model_label}")
+    print(f"Model       : {active_model(use_azure=use_azure)}")
     print(f"Temperature : {TEMPERATURE}")
     print(f"Context     : {'yes' if use_context else 'no'}")
     print("Generating...\n")

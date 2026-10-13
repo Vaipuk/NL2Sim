@@ -29,20 +29,10 @@ load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 MODEL       = "ft:gpt-4.1-2025-04-14:personal:filterfinetune80:DZeuAI1R"
 TEMPERATURE = 0.2
 
-# ── Lazy client ────────────────────────────────────────────
-_client = None
+from llm_client import chat, resolve_provider
 
-def _get_client() -> OpenAI:
-    global _client
-    if _client is None:
-        api_key = os.environ.get("OPENAI_API_KEY", "")
-        if not api_key:
-            raise EnvironmentError(
-                "OPENAI_API_KEY is not set. "
-                "Add it to your .env file or export it in your terminal."
-            )
-        _client = OpenAI(api_key=api_key)
-    return _client
+# MODEL above is an OpenAI fine-tune id; other providers use their configured model.
+WHATIF_MODELS = {"openai": MODEL, "azure": None, "local": None}
 
 
 # ── System prompt builder ──────────────────────────────────
@@ -117,13 +107,13 @@ def generate_whatif(
         {"role": "user",   "content": build_prompt(instruction, base_config)},
     ]
 
-    response = _get_client().responses.create(
-        model=MODEL,
+    provider = resolve_provider()
+    raw = chat(
+        messages,
         temperature=TEMPERATURE,
-        input=messages,
+        provider=provider,
+        model=WHATIF_MODELS.get(provider),
     )
-
-    raw = response.output_text.strip()
 
     if raw.startswith("```"):
         raw = re.sub(r"```(?:json)?", "", raw).replace("```", "").strip()
