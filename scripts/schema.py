@@ -213,9 +213,9 @@ SCHEMA_EXAMPLE = """ {
   ],
   "nodes": [
     {
-      "supplier": [""],
-      "facility": [""],
-      "customer":[""]
+      "supplier": ["<every supplier name>"],
+      "facility": ["<every facility name>"],
+      "customer": ["<every customer name>"]
     }
   ],
   "edges": [
