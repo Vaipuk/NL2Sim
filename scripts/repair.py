@@ -107,7 +107,7 @@ def describe_entity(config: dict, section: str, idx) -> str:
         return f"the product {name_part}"
     if section == "inventory":
         inv_type = entry.get("type")
-        label = {"raw_material": "raw material", "intermediate_material": "intermediate material", "product": "product"}.get(inv_type, "item")
+        label = {"raw_materials": "raw material", "intermediate_materials": "intermediate material", "products": "product"}.get(inv_type, "item")
         return f"inventory tracking for {label} {name_part}"
     if section == "supplier":
         material = entry.get("supply_material_name")
@@ -1673,7 +1673,7 @@ def _fix_facility_missing_inbound(config: dict, facility: dict):
         material_type = _material_type_for(config, material)
         receiving_facility_type = facility.get("type")
 
-        if receiving_facility_type != "warehouse" and material_type == "raw_material":
+        if receiving_facility_type != "warehouse" and material_type == "raw_materials":
             _build_new_entry(config, "supplier", {"supply_material_name": material}, "supplier")
             new_source_name = config["supplier"][-1]["name"]
         else:
@@ -1777,7 +1777,7 @@ def _fix_facility_missing_outbound(config: dict, facility: dict):
         material = _pick_sendable_material("Which material should the new destination take?")
         material_type = _material_type_for(config, material)
 
-        if material_type == "product":
+        if material_type == "products":
             _build_new_entry(config, "customer", {"product": material}, "customer")
             new_dest_name = config["customer"][-1]["name"]
         else:
@@ -2382,7 +2382,7 @@ def repair_supplier_missing_outbound_edge(config: dict, issue: ValidationIssue) 
     new_edge = {
         "source": supplier_name,
         "destination": destination,
-        "material_type": "raw_material",
+        "material_type": "raw_materials",
         "material_name": material_name,
     }
     config.setdefault("edges", []).append(new_edge)

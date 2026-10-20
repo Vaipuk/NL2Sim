@@ -173,10 +173,13 @@ def check_product_bom_references(config: dict) -> list[ValidationIssue]:
     return issues
 
 
+# Identity since type values are the section names themselves. Kept as a map
+# because it is also the set of recognized type values, used by both layers
+# and by repair.py.
 INVENTORY_TYPE_TO_SECTION = {
-    "raw_material": "raw_materials",
-    "intermediate_material": "intermediate_materials",
-    "product": "products",
+    "raw_materials": "raw_materials",
+    "intermediate_materials": "intermediate_materials",
+    "products": "products",
 }
 
 
@@ -184,7 +187,7 @@ def check_inventory_type_consistency(config: dict) -> list[ValidationIssue]:
     """
     Every inventory[] entry's name must exist in the material section that
     corresponds to its declared type. E.g. an inventory entry with
-    type="raw_material" and name="silicon wafer" requires a raw_materials[]
+    type="raw_materials" and name="silicon wafer" requires a raw_materials[]
     entry named "silicon wafer".
 
     An inventory[].type value not in INVENTORY_TYPE_TO_SECTION is skipped
@@ -530,11 +533,8 @@ def check_material_has_inventory_entry(config: dict) -> list[ValidationIssue]:
     issues: list[ValidationIssue] = []
 
     inventory_names = _collect_names(config, "inventory")
-    category_to_type = {
-        "raw_materials": "raw_material",
-        "intermediate_materials": "intermediate_material",
-        "products": "product",
-    }
+    # type value == section name; listed explicitly to fix iteration order
+    category_to_type = {s: s for s in INVENTORY_TYPE_TO_SECTION}
 
     for section, expected_type in category_to_type.items():
         for idx, entry in enumerate(config.get(section, []) or []):

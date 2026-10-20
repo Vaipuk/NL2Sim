@@ -158,11 +158,16 @@ PARAM_KEYS = ["a", "b", "c", "d", "e"]
 # Canonical enum value sets -- single source of truth. repair.py imports
 # these directly rather than maintaining its own duplicate lists, so the
 # two never drift out of sync.
-MATERIAL_TYPES = ["raw_material", "intermediate_material", "product"]
+# Plural, matching the section names these refer to -- and matching what the
+# training data and simulate.py already use.
+MATERIAL_TYPES = ["raw_materials", "intermediate_materials", "products"]
 PROCUREMENT_SCHEME_TYPES = ["periodic_supply", "demand_driven", "inventory_threshold"]
 FACILITY_TYPES = ["manufacturing", "warehouse"]
 SHORTAGE_POLICIES = ["salelost", "backorder", "salelost_partial", "backorder_partial"]
-TIME_UNITS = ["seconds", "minutes", "hours", "days", "weeks", "months"]
+# Both forms: the training data emits the singular ("day"), the schema example
+# the plural ("days"). simulate.py never reads this field, so neither is wrong.
+TIME_UNITS = ["second", "minute", "hour", "day", "week", "month",
+              "seconds", "minutes", "hours", "days", "weeks", "months"]
 
 
 # ----------------------------------------------------------------------
@@ -223,7 +228,7 @@ SECTION_SPECS = {
             # it's checked/filled by dedicated logic
             # (is_procurement_scheme) instead.
             "procurement_scheme": {
-                "required": lambda parent: parent.get("type") == "raw_material",
+                "required": lambda parent: parent.get("type") == "raw_materials",
                 "is_procurement_scheme": True,
             },
             "procurement_arrival": FIELD_DISTRIBUTION(
