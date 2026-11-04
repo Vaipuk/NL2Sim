@@ -157,7 +157,8 @@ HEADERS = [("description", 20, "s"), ("kv_overall", 8, ".4f"), ("kv_numeric", 8,
            ("numeric_precision", 8, ".4f"), ("numeric_recall", 8, ".4f"),
            ("reliability_score", 12, ".4f"), ("gen_s", 7, ".1f")]
 LABELS = {"description": "case", "kv_overall": "KV all", "kv_numeric": "KV num",
-          "kv_structure": "KV struct", "wrong": "WRONG",
+          "kv_structure": "KV struct", "kv_categorical": "KV categ",
+          "wrong": "WRONG",
           "incomplete": "not stated", "blocking": "blocking", "bleu_4": "BLEU-4",
           "numeric_f1": "Num F1", "numeric_precision": "Num P",
           "numeric_recall": "Num R", "reliability_score": "reliability",
@@ -178,6 +179,13 @@ def print_table(rows: list[dict]) -> None:
             text = "-" if v is None else (v if isinstance(v, str) else format(v, fmt))
             cells.append(f"{text:<{w}}")
         print("  " + "".join(cells))
+    kv = [r for r in rows if "kv_overall" in r]
+    if kv:
+        print("  " + "-" * 110)
+        for k in ("kv_overall", "kv_numeric", "kv_structure", "kv_categorical"):
+            print(f"  mean {LABELS.get(k, k):<10s} {sum(r[k] for r in kv) / len(kv):.4f}"
+                  f"   over {len(kv)} case(s)")
+
     scored = [r for r in rows if "reliability_score" in r]
     if scored:
         print("  " + "-" * 110)
@@ -185,11 +193,6 @@ def print_table(rows: list[dict]) -> None:
         means = {k: sum(r[k] for r in scored) / n
                  for k in ("bleu_4", "numeric_f1", "numeric_precision",
                            "numeric_recall", "reliability_score")}
-        kv = [r for r in rows if "kv_overall" in r]
-        if kv:
-            for k in ("kv_overall", "kv_numeric", "kv_structure"):
-                print(f"  mean {LABELS[k]:<10s} {sum(r[k] for r in kv)/len(kv):.4f}"
-                      f"   over {len(kv)} case(s)")
         ver = [r for r in rows if "wrong" in r]
         mw = sum(r["wrong"] for r in ver) / max(1, len(ver))
         mi = sum(r["incomplete"] for r in ver) / max(1, len(ver))
@@ -246,13 +249,13 @@ def main() -> None:
     print(f"  outdir    : {outdir}")
 
     rows: list[dict] = []
-    for i, d in enumerate(descs, 1):
-        print(f"\n  [{i}/{len(descs)}] {d.name} ...", flush=True)
+    for i, (name, text, bench) in enumerate(cases, 1):
+        print(f"\n  [{i}/{len(cases)}] {name} ...", flush=True)
         try:
-            row = run_one(d, outdir, args.provider, not args.no_context,
-                          not args.no_score, args.rescore)
+            row = run_one(name, text, outdir, args.provider, not args.no_context,
+                          not args.no_score, args.rescore, benchmark=bench)
         except Exception as e:                      # one bad case must not kill the run
-            row = {"description": d.name, "error": f"{type(e).__name__}: {e}"}
+            row = {"description": name, "error": f"{type(e).__name__}: {e}"}
             traceback.print_exc(limit=2)
         rows.append(row)
         if "error" in row:
