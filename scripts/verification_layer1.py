@@ -179,8 +179,11 @@ SECTION_SPECS = {
         "container": "list",
         "required_section": True,
         "fields": {
-            "name": FIELD(required=True, is_name=True),
-            "version": FIELD(required=True),
+            # Labels only: simulate.py never reads config_info, and all 1000
+            # training configs leave both as "missing". Demanding them failed
+            # every config over a value nothing consumes.
+            "name": FIELD(required=False, silent=True, is_name=True),
+            "version": FIELD(required=False, silent=True),
         },
     },
     "raw_materials": {

@@ -536,7 +536,7 @@ if __name__ == "__main__":
     original_nl    = Path(args.description_file).read_text(encoding="utf-8").strip()
     generated_json = json.loads(Path(args.json_file).read_text(encoding="utf-8"))
 
-    print(f"Computing reliability score ({'Azure' if args.azure else 'OpenAI'})...")
+    print(f"Computing reliability score ({resolve_provider(use_azure=args.azure)})...")
     result = compute_reliability_score(
         original_nl, generated_json, use_azure=args.azure)
 
