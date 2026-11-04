@@ -34,12 +34,27 @@ from nl_to_json import generate_json                            # noqa: E402
 from repair_orchestrator import run_all_verifications           # noqa: E402
 
 
-def blocking_count(cfg: dict) -> tuple[int, int]:
-    """(blocking, warnings) from all three verification layers."""
+def verify_counts(cfg: dict) -> dict:
+    """
+    Verification issues, split by what they mean about the model.
+
+    MISSING_REQUIRED_VALUE means the description never stated the field and the
+    model correctly declined to invent one -- the "missing" sentinel doing its
+    job. Counting it as a defect ranks a terse description as the worst output
+    when it may be among the best, so it is reported separately from errors the
+    model is actually responsible for.
+    """
     issues = run_all_verifications(cfg)
-    blocking = sum(1 for i in issues
-                   if getattr(i.severity, "name", str(i.severity)) == "BLOCKING")
-    return blocking, len(issues) - blocking
+    counts = {"blocking": 0, "warnings": 0, "incomplete": 0, "wrong": 0}
+    by_type: dict = {}
+    for i in issues:
+        sev = getattr(i.severity, "name", str(i.severity))
+        counts["blocking" if sev == "BLOCKING" else "warnings"] += 1
+        name = getattr(i.defect_type, "name", str(i.defect_type))
+        by_type[name] = by_type.get(name, 0) + 1
+        counts["incomplete" if name == "MISSING_REQUIRED_VALUE" else "wrong"] += 1
+    counts["by_defect_type"] = by_type
+    return counts
 
 
 def run_one(desc_path: Path, outdir: Path, provider: str | None,
@@ -62,7 +77,7 @@ def run_one(desc_path: Path, outdir: Path, provider: str | None,
         row["gen_s"] = round(time.time() - t0, 1)
 
     # ---- verify (free) ----
-    row["blocking"], row["warnings"] = blocking_count(cfg)
+    row.update(verify_counts(cfg))
 
     # ---- reliability score (one more API call) ----
     if do_score:
@@ -79,11 +94,12 @@ def run_one(desc_path: Path, outdir: Path, provider: str | None,
     return row
 
 
-HEADERS = [("description", 28, "s"), ("blocking", 9, "d"), ("bleu_4", 8, ".4f"),
-           ("numeric_f1", 11, ".4f"), ("numeric_precision", 10, ".4f"),
-           ("numeric_recall", 8, ".4f"), ("reliability_score", 12, ".4f"),
-           ("gen_s", 7, ".1f"), ("score_s", 8, ".1f")]
-LABELS = {"description": "description", "blocking": "blocking", "bleu_4": "BLEU-4",
+HEADERS = [("description", 28, "s"), ("wrong", 7, "d"), ("incomplete", 12, "d"),
+           ("blocking", 9, "d"), ("bleu_4", 8, ".4f"), ("numeric_f1", 8, ".4f"),
+           ("numeric_precision", 8, ".4f"), ("numeric_recall", 8, ".4f"),
+           ("reliability_score", 12, ".4f"), ("gen_s", 7, ".1f")]
+LABELS = {"description": "description", "wrong": "WRONG",
+          "incomplete": "not stated", "blocking": "blocking", "bleu_4": "BLEU-4",
           "numeric_f1": "Num F1", "numeric_precision": "Num P",
           "numeric_recall": "Num R", "reliability_score": "reliability",
           "gen_s": "gen s", "score_s": "score s"}
@@ -110,11 +126,14 @@ def print_table(rows: list[dict]) -> None:
         means = {k: sum(r[k] for r in scored) / n
                  for k in ("bleu_4", "numeric_f1", "numeric_precision",
                            "numeric_recall", "reliability_score")}
-        blk = sum(r["blocking"] for r in rows if "blocking" in r) / max(
-            1, len([r for r in rows if "blocking" in r]))
-        print(f"  {'MEAN of ' + str(n):<28}{blk:<9.1f}{means['bleu_4']:<8.4f}"
-              f"{means['numeric_f1']:<11.4f}{means['numeric_precision']:<10.4f}"
-              f"{means['numeric_recall']:<8.4f}{means['reliability_score']:<12.4f}")
+        ver = [r for r in rows if "wrong" in r]
+        mw = sum(r["wrong"] for r in ver) / max(1, len(ver))
+        mi = sum(r["incomplete"] for r in ver) / max(1, len(ver))
+        mb = sum(r["blocking"] for r in ver) / max(1, len(ver))
+        print(f"  {'MEAN of ' + str(n):<28}{mw:<7.1f}{mi:<12.1f}{mb:<9.1f}"
+              f"{means['bleu_4']:<8.4f}{means['numeric_f1']:<8.4f}"
+              f"{means['numeric_precision']:<8.4f}{means['numeric_recall']:<8.4f}"
+              f"{means['reliability_score']:<12.4f}")
     print("=" * 112)
 
 
@@ -165,7 +184,7 @@ def main() -> None:
         if "error" in row:
             print(f"        FAILED: {row['error']}")
         else:
-            bits = [f"blocking={row['blocking']}"]
+            bits = [f"wrong={row['wrong']}", f"not-stated={row['incomplete']}"]
             if "reliability_score" in row:
                 bits.append(f"reliability={row['reliability_score']:.2%}")
                 bits.append(f"numR={row['numeric_recall']:.2f}")
