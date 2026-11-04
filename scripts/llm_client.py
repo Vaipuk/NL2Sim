@@ -143,21 +143,33 @@ def chat(
         messages=messages,
         **kwargs,
     )
-    return (response.choices[0].message.content or "").strip()
+    # Reasoning blocks are never part of the answer -- drop them here so every
+    # caller gets the reply alone, not just the ones that parse JSON.
+    return strip_reasoning(response.choices[0].message.content or "")
 
 
-def extract_json_text(raw: str) -> str:
+def strip_reasoning(raw: str) -> str:
     """
-    Pull the JSON out of a model reply.
+    Remove a reasoning model's <think>...</think> block from a reply.
 
-    Reasoning models (Qwen3, DeepSeek-R1, ...) emit a <think>...</think>
-    block before the answer, and most models like to wrap JSON in markdown
-    fences. Strip both, then fall back to the outermost {...} span so a
-    stray sentence either side does not break parsing.
+    Qwen3, DeepSeek-R1 and friends think out loud before answering. That text
+    is not part of the answer, and scoring it as though it were wrecks any
+    text metric -- score_reliability was comparing the user's description
+    against ~700 words of internal monologue.
     """
     text = re.sub(r"<think>.*?</think>", "", raw, flags=re.DOTALL)
     # an unterminated block means the reply was cut off mid-reasoning
     text = re.sub(r"^.*?</think>", "", text, flags=re.DOTALL)
+    return text.strip()
+
+
+def extract_json_text(raw: str) -> str:
+    """
+    Pull the JSON out of a model reply: drop the reasoning block and any
+    markdown fences, then fall back to the outermost {...} span so a stray
+    sentence either side does not break parsing.
+    """
+    text = strip_reasoning(raw)
     text = re.sub(r"```(?:json)?", "", text).replace("```", "").strip()
 
     if not text.startswith("{"):
@@ -202,4 +214,11 @@ if __name__ == "__main__":
     for label, raw in shapes.items():
         assert _json.loads(extract_json_text(raw)) == {"a": 1}, label
     print(f"json extraction OK ({len(shapes)} reply shapes)")
+
+    # Plain-text replies must lose the reasoning block too -- scoring it as
+    # the answer is what broke the reliability metric.
+    assert strip_reasoning("<think>noise 60000 and 80000</think>\nThe answer.") == "The answer."
+    assert strip_reasoning("<think>cut off</think>Answer") == "Answer"
+    assert strip_reasoning("No block here.") == "No block here."
+    print("reasoning strip OK (3 cases)")
     print("active:", active_model())
