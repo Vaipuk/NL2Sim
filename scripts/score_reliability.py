@@ -252,7 +252,8 @@ def strip_tier3_fields(json_data: dict) -> dict:
 # NL reconstruction
 # ============================================================
 
-def reconstruct_nl(json_data: dict, use_azure: bool = False) -> str:
+def reconstruct_nl(json_data: dict, use_azure: bool = False,
+                   provider: str = None) -> str:
     """
     Reconstruct natural language from a generated JSON config.
     Strips Tier 3 fields first, then calls the appropriate LLM.
@@ -274,7 +275,7 @@ def reconstruct_nl(json_data: dict, use_azure: bool = False) -> str:
         )},
     ]
 
-    provider = resolve_provider(use_azure=use_azure)
+    provider = resolve_provider(provider, use_azure=use_azure)
     model    = RECONSTRUCTION_MODELS.get(provider)
     print(f"  [{provider}] Reconstruction model: {model or 'configured default'}")
 
@@ -451,6 +452,7 @@ def compute_reliability_score(
     original_nl: str,
     generated_json: dict,
     use_azure: bool = False,
+    provider: str = None,
 ) -> dict:
     """
     Compute reliability score for a generated JSON config.
@@ -477,7 +479,8 @@ def compute_reliability_score(
     """
     # Step 1 — reconstruct NL from generated JSON
     print("  Reconstructing NL from JSON...")
-    reconstructed_nl = reconstruct_nl(generated_json, use_azure=use_azure)
+    reconstructed_nl = reconstruct_nl(generated_json, use_azure=use_azure,
+                                      provider=provider)
 
     # Step 2 — preprocess both texts
     ref = preprocess(original_nl)
