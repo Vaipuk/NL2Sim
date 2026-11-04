@@ -146,12 +146,12 @@ def run_one(name: str, text: str, outdir: Path, provider: str | None,
                   "numeric_recall", "reliability_score"):
             row[k] = res[k]
         row["diagnosis"] = res["diagnosis"]
-        (outdir / f"{desc_path.stem}_score.json").write_text(
+        (outdir / f"{Path(name).stem}_score.json").write_text(
             json.dumps(res, indent=2), encoding="utf-8")
     return row
 
 
-HEADERS = [("description", 20, "s"), ("kv_overall", 8, ".4f"), ("kv_numeric", 8, ".4f"),
+HEADERS = [("description", 24, "s"), ("kv_overall", 8, ".4f"), ("kv_numeric", 8, ".4f"),
            ("kv_structure", 10, ".4f"), ("wrong", 7, "d"), ("incomplete", 12, "d"),
            ("blocking", 9, "d"), ("bleu_4", 8, ".4f"), ("numeric_f1", 8, ".4f"),
            ("numeric_precision", 8, ".4f"), ("numeric_recall", 8, ".4f"),
@@ -171,7 +171,7 @@ def print_table(rows: list[dict]) -> None:
     print("  " + "-" * 110)
     for r in rows:
         if "error" in r:
-            print(f"  {r['description']:<28}FAILED: {r['error']}")
+            print(f"  {r['description']:<24}FAILED: {r['error']}")
             continue
         cells = []
         for k, w, fmt in HEADERS:
@@ -197,7 +197,7 @@ def print_table(rows: list[dict]) -> None:
         mw = sum(r["wrong"] for r in ver) / max(1, len(ver))
         mi = sum(r["incomplete"] for r in ver) / max(1, len(ver))
         mb = sum(r["blocking"] for r in ver) / max(1, len(ver))
-        print(f"  {'MEAN of ' + str(n):<28}{mw:<7.1f}{mi:<12.1f}{mb:<9.1f}"
+        print(f"  {'MEAN of ' + str(n):<24}{mw:<7.1f}{mi:<12.1f}{mb:<9.1f}"
               f"{means['bleu_4']:<8.4f}{means['numeric_f1']:<8.4f}"
               f"{means['numeric_precision']:<8.4f}{means['numeric_recall']:<8.4f}"
               f"{means['reliability_score']:<12.4f}")
