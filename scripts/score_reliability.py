@@ -142,9 +142,15 @@ General rules:
    - normal a,b     → mean of a with standard deviation of b
    - exponential a  → exponentially distributed with mean of a
    - triangular a,b,c → minimum a, most likely b, maximum c
-3. Write in clear flowing prose.
+3. Write in clear flowing prose, the way a person would describe their own
+   supply chain to a colleague. Continuous sentences and paragraphs only.
+   Do NOT use markdown, headings, bullet points, bold, or section labels.
+   Do NOT organise the text to mirror the JSON's structure.
 4. Be precise with all numbers.
-5. If a field contains MISSING state that information was not provided.
+5. Say nothing about fields that are absent, empty, zero or MISSING, and do
+   not refer to the JSON itself. Describe only what the scenario states --
+   narrating what is missing adds figures the original description never
+   contained.
 """
 
 
