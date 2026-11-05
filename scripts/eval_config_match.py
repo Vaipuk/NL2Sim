@@ -100,9 +100,27 @@ def score(generated: dict, benchmark: dict, tol: float = 0.0) -> dict:
 
     buckets = {"categorical": [0, 0, 0], "numeric": [0, 0, 0], "overall": [0, 0, 0]}
     mismatches: list[dict] = []
+    unspecified = invented = 0
 
     for path in bpaths:
         bv = ben[path]
+
+        # A benchmark "missing" means the description never stated the field --
+        # there is no ground truth to match, so scoring it measures nothing.
+        # Over half of every benchmark config is this sentinel, mostly unused
+        # distribution parameters (c/d/e on a two-parameter uniform), and
+        # including them pinned categorical F1 near 0.5 regardless of output.
+        # Counted instead: how many the model filled in anyway, which is the
+        # hallucination signal and belongs on its own, not inside an F1.
+        if bv == MISSING:
+            unspecified += 1
+            gv = gen.get(path)
+            if gv is not None and gv != MISSING and gv != 0:
+                invented += 1
+                mismatches.append({"path": path, "expected": MISSING,
+                                   "got": gv, "why": "invented"})
+            continue
+
         kind = "numeric" if _is_num(bv) else "categorical"
         if path not in gen:
             buckets[kind][2] += 1          # fn: benchmark had it, output did not
@@ -119,6 +137,8 @@ def score(generated: dict, benchmark: dict, tol: float = 0.0) -> dict:
 
     for path in gpaths - bpaths:           # produced a field the benchmark lacks
         gv = gen[path]
+        if gv == MISSING or gv == 0:       # schema padding, not a real claim
+            continue
         kind = "numeric" if _is_num(gv) else "categorical"
         buckets[kind][1] += 1
         buckets["overall"][1] += 1
@@ -131,6 +151,9 @@ def score(generated: dict, benchmark: dict, tol: float = 0.0) -> dict:
         "overall": _prf(*buckets["overall"]),
         "benchmark_fields": len(bpaths),
         "generated_fields": len(gpaths),
+        "scored_fields": len(bpaths) - unspecified,
+        "unspecified": unspecified,
+        "invented": invented,
         "mismatches": sorted(mismatches, key=lambda m: m["path"]),
     }
 
@@ -236,6 +259,24 @@ if __name__ == "__main__":
         miss["supplier"][0]["supplier_cost"] = "missing"
         assert [m["why"] for m in score(miss, base)["mismatches"]] == ["placeholder"]
 
-        print("eval_config_match self-check OK (6 cases)")
+        # A benchmark "missing" is not scored: over half of every real benchmark
+        # is that sentinel (unused distribution slots), and scoring it pinned
+        # categorical F1 near 0.5 whatever the model produced.
+        pad = copy.deepcopy(base)
+        pad["supplier"][0]["supplier_lead_time"]["parameters"].update(c="missing", d="missing")
+        gen = copy.deepcopy(pad)
+        gen["supplier"][0]["supplier_lead_time"]["parameters"].update(c=0, d=0)
+        r = score(gen, pad)
+        assert r["overall"]["f1"] == 1.0, r["overall"]
+        assert r["unspecified"] == 2 and r["invented"] == 0, r
+
+        # but filling an unspecified field with a real value is flagged
+        gen2 = copy.deepcopy(pad)
+        gen2["supplier"][0]["supplier_lead_time"]["parameters"]["c"] = 99
+        r2 = score(gen2, pad)
+        assert r2["invented"] == 1, r2
+        assert [m["why"] for m in r2["mismatches"]] == ["invented"], r2["mismatches"]
+
+        print("eval_config_match self-check OK (8 cases)")
     else:
         main()

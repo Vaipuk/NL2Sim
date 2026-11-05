@@ -133,6 +133,8 @@ def run_one(name: str, text: str, outdir: Path, provider: str | None,
         row["kv_numeric"] = m["numeric"]["f1"]
         row["kv_categorical"] = m["categorical"]["f1"]
         row["kv_mismatches"] = len(m["mismatches"])
+        row["kv_invented"] = m["invented"]
+        row["kv_scored_fields"] = m["scored_fields"]
         (outdir / f"{Path(name).stem}_match.json").write_text(
             json.dumps(m, indent=2), encoding="utf-8")
 
@@ -152,12 +154,13 @@ def run_one(name: str, text: str, outdir: Path, provider: str | None,
 
 
 HEADERS = [("description", 24, "s"), ("kv_overall", 8, ".4f"), ("kv_numeric", 8, ".4f"),
-           ("kv_structure", 10, ".4f"), ("wrong", 7, "d"), ("incomplete", 12, "d"),
+           ("kv_structure", 10, ".4f"), ("kv_invented", 9, "d"), ("wrong", 7, "d"), ("incomplete", 12, "d"),
            ("blocking", 9, "d"), ("bleu_4", 8, ".4f"), ("numeric_f1", 8, ".4f"),
            ("numeric_precision", 8, ".4f"), ("numeric_recall", 8, ".4f"),
            ("reliability_score", 12, ".4f"), ("gen_s", 7, ".1f")]
 LABELS = {"description": "case", "kv_overall": "KV all", "kv_numeric": "KV num",
           "kv_structure": "KV struct", "kv_categorical": "KV categ",
+          "kv_invented": "invented",
           "wrong": "WRONG",
           "incomplete": "not stated", "blocking": "blocking", "bleu_4": "BLEU-4",
           "numeric_f1": "Num F1", "numeric_precision": "Num P",
