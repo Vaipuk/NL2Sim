@@ -26,6 +26,7 @@ keeps the evaluation test set out of them.
 from __future__ import annotations
 
 import argparse
+import math
 import json
 from pathlib import Path
 
@@ -95,14 +96,25 @@ def main() -> None:
                         "gate_proj", "up_proj", "down_proj"],
     )
 
+    # TRL's SFTConfig takes warmup_steps, not warmup_ratio, so work out 10%
+    # of the run ourselves rather than hard-coding a step count that stops
+    # being 10% the moment epochs or batch size change.
+    steps_per_epoch = math.ceil(len(ds["train"]) / (args.batch_size * args.grad_accum))
+    total_steps = max(1, int(steps_per_epoch * args.epochs))
+    warmup = max(1, int(total_steps * 0.1))
+    print(f"  schedule   : {total_steps} optimizer steps, {warmup} warmup")
+
     cfg = SFTConfig(
         output_dir=args.out_dir,
         num_train_epochs=args.epochs,
         per_device_train_batch_size=args.batch_size,
+        # Eval defaults to batch 8, which at this sequence length runs out of
+        # memory on a 48 GB card at the first evaluation -- an hour in.
+        per_device_eval_batch_size=1,
         gradient_accumulation_steps=args.grad_accum,
         learning_rate=args.lr,
         lr_scheduler_type="cosine",
-        warmup_ratio=0.1,
+        warmup_steps=warmup,
         logging_steps=5,
         eval_strategy="epoch",
         save_strategy="epoch",
