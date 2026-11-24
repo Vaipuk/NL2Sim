@@ -207,6 +207,20 @@ def main() -> None:
         processing_class=tok,
     )
 
+    # The fp16 GradScaler calls _amp_foreach_non_finite_check_and_unscale_,
+    # which CUDA does not implement for bf16 at all. Anything trainable that
+    # comes back bf16 -- from the checkpoint's native dtype, or from PEFT
+    # matching a base layer -- kills the first optimizer step. fp32 adapters
+    # under fp16 autocast is the normal QLoRA arrangement and costs ~80 MB at
+    # r=16, so cast rather than hunt for which module it was.
+    seen: dict[str, int] = {}
+    for _, prm in trainer.model.named_parameters():
+        if prm.requires_grad:
+            seen[str(prm.dtype)] = seen.get(str(prm.dtype), 0) + 1
+            if prm.dtype != torch.float32:
+                prm.data = prm.data.to(torch.float32)
+    print(f"  trainable  : {seen} -> cast to float32")
+
     trainer.train()
     trainer.save_model(args.out_dir)
     tok.save_pretrained(args.out_dir)
