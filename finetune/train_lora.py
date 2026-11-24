@@ -143,6 +143,14 @@ def main() -> None:
 
         model = prepare_model_for_kbit_training(
             model, use_gradient_checkpointing=True)
+    else:
+        # Without this, gradient checkpointing silently does nothing on a LoRA
+        # run: the base weights are frozen, so no input to a checkpointed block
+        # requires grad, the recomputation graph is never built, and every
+        # layer's activations are stored after all. That is the difference
+        # between ~3 GB and ~24 GB of activations at 8192 tokens -- the whole
+        # reason 8B appeared not to fit in 48 GB.
+        model.enable_input_require_grads()
 
     peft_config = LoraConfig(
         r=args.lora_r,
