@@ -26,9 +26,15 @@ keeps the evaluation test set out of them.
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import math
 import json
+import os
 from pathlib import Path
+
+# Must be set before torch is imported. The first OOM left 2.66 GB reserved
+# but unallocated; expandable segments reuse that instead of stranding it.
+os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_DATA = ROOT / "outputs" / "ft_data"
@@ -52,6 +58,8 @@ def main() -> None:
     ap.add_argument("--batch-size", type=int, default=1)
     ap.add_argument("--grad-accum", type=int, default=8)
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--no-liger", action="store_true",
+                    help="disable the fused cross-entropy kernel (expect OOM at 8192)")
     args = ap.parse_args()
 
     import torch
@@ -67,6 +75,16 @@ def main() -> None:
     supports_bf16 = cap[0] >= 8
     print(f"  bf16       : {'yes' if supports_bf16 else 'no (Turing) -> using fp16'}")
     print("  attention  : sdpa")
+
+    # Qwen3's vocabulary is ~152k, so plain cross-entropy builds a
+    # seq_len x 152k logits tensor plus its gradient -- 7.5 GB at 8192 tokens,
+    # which is what OOMs a 48 GB card on the first backward pass. Liger's
+    # fused linear cross-entropy computes the loss in chunks and never
+    # materialises it. Without Liger the only lever left is a shorter
+    # sequence, and 4096 would truncate 52% of samples at the end of the
+    # config -- teaching the model to stop early.
+    use_liger = importlib.util.find_spec("liger_kernel") is not None and not args.no_liger
+    print(f"  liger      : {'yes (fused cross-entropy)' if use_liger else 'NO -- expect OOM above ~6144 tokens'}")
 
     data = Path(args.data_dir)
     ds = load_dataset("json", data_files={"train": str(data / "train.jsonl"),
@@ -124,6 +142,7 @@ def main() -> None:
         gradient_checkpointing_kwargs={"use_reentrant": False},
         bf16=supports_bf16,
         fp16=not supports_bf16,
+        use_liger_kernel=use_liger,
         seed=args.seed,
         report_to="none",
     )
