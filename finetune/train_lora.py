@@ -110,7 +110,11 @@ def main() -> None:
         tok.pad_token = tok.eos_token
 
     compute_dtype = torch.bfloat16 if supports_bf16 else torch.float16
-    load_kwargs: dict = {}
+    # Needed on the 4-bit path too. Without it transformers leaves every
+    # un-quantized module in the checkpoint's native bf16, PEFT then builds the
+    # LoRA adapters in bf16, and the fp16 GradScaler dies unscaling bf16 grads
+    # -- an op CUDA does not implement for bf16 on Turing at all.
+    load_kwargs: dict = {"dtype": compute_dtype}
     if args.load_4bit:
         # QLoRA: 8B in NF4 is ~5 GB against ~16 GB in fp16, which is what makes
         # the full 8192-token sequence fit on a 48 GB card. The adapter still
@@ -126,7 +130,6 @@ def main() -> None:
         )
         print("  weights    : 4-bit NF4 (QLoRA)")
     else:
-        load_kwargs["dtype"] = compute_dtype
         print(f"  weights    : {'bf16' if supports_bf16 else 'fp16'}")
 
     model = AutoModelForCausalLM.from_pretrained(
