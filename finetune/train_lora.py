@@ -57,6 +57,9 @@ def main() -> None:
     ap.add_argument("--batch-size", type=int, default=1)
     ap.add_argument("--grad-accum", type=int, default=8)
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--load-4bit", action="store_true",
+                    help="load base weights in 4-bit NF4 (QLoRA): ~5GB instead of ~16GB, "
+                         "which is what makes 8B at 8192 tokens fit on a 48GB card")
     ap.add_argument("--no-liger", action="store_true",
                     help="disable the fused cross-entropy kernel (expect OOM at 8192)")
     args = ap.parse_args()
@@ -106,14 +109,40 @@ def main() -> None:
     if tok.pad_token is None:
         tok.pad_token = tok.eos_token
 
+    compute_dtype = torch.bfloat16 if supports_bf16 else torch.float16
+    load_kwargs: dict = {}
+    if args.load_4bit:
+        # QLoRA: 8B in NF4 is ~5 GB against ~16 GB in fp16, which is what makes
+        # the full 8192-token sequence fit on a 48 GB card. The adapter still
+        # trains in compute_dtype, so quality loss is small; the alternative
+        # was truncating the end of half the configs.
+        from transformers import BitsAndBytesConfig
+
+        load_kwargs["quantization_config"] = BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_quant_type="nf4",
+            bnb_4bit_use_double_quant=True,
+            bnb_4bit_compute_dtype=compute_dtype,
+        )
+        print("  weights    : 4-bit NF4 (QLoRA)")
+    else:
+        load_kwargs["dtype"] = compute_dtype
+        print(f"  weights    : {'bf16' if supports_bf16 else 'fp16'}")
+
     model = AutoModelForCausalLM.from_pretrained(
         args.model,
-        dtype=torch.bfloat16 if supports_bf16 else torch.float16,
         attn_implementation="sdpa",
         device_map={"": 0},
         trust_remote_code=True,
+        **load_kwargs,
     )
     model.config.use_cache = False          # incompatible with gradient checkpointing
+
+    if args.load_4bit:
+        from peft import prepare_model_for_kbit_training
+
+        model = prepare_model_for_kbit_training(
+            model, use_gradient_checkpointing=True)
 
     peft_config = LoraConfig(
         r=args.lora_r,
