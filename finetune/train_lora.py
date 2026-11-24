@@ -26,7 +26,6 @@ keeps the evaluation test set out of them.
 from __future__ import annotations
 
 import argparse
-import importlib.util
 import math
 import json
 import os
@@ -83,8 +82,20 @@ def main() -> None:
     # materialises it. Without Liger the only lever left is a shorter
     # sequence, and 4096 would truncate 52% of samples at the end of the
     # config -- teaching the model to stop early.
-    use_liger = importlib.util.find_spec("liger_kernel") is not None and not args.no_liger
-    print(f"  liger      : {'yes (fused cross-entropy)' if use_liger else 'NO -- expect OOM above ~6144 tokens'}")
+    # find_spec() finds a package directory that may still fail to import --
+    # which is how a run reported "liger: yes" and then OOMed with the exact
+    # unfused allocation. Import it for real.
+    use_liger = False
+    if not args.no_liger:
+        try:
+            import liger_kernel  # noqa: F401
+            use_liger = True
+        except Exception as e:
+            print(f"  liger      : UNAVAILABLE ({type(e).__name__}: {e})")
+    if use_liger:
+        print("  liger      : yes (fused cross-entropy)")
+    elif args.no_liger:
+        print("  liger      : off by request")
 
     data = Path(args.data_dir)
     ds = load_dataset("json", data_files={"train": str(data / "train.jsonl"),
