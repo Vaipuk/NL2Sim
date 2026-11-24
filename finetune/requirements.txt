@@ -1,0 +1,25 @@
+# Training stack for finetune/train_lora.py. The repo's top-level
+# requirements.txt covers inference and evaluation only.
+#
+# Pinned to the versions that produced outputs/lora_qwen3_8b: TRL renamed
+# SFTConfig fields between releases and transformers 5.x moved the trainer
+# internals, so an unpinned install does not reproduce this run.
+#
+# torch is deliberately unpinned here -- install the build matching the
+# cluster's CUDA driver first, then this file:
+#   pip install torch --index-url https://download.pytorch.org/whl/cu128
+#   pip install -r finetune/requirements.txt
+
+transformers==5.17.0
+trl==1.18.2
+peft==0.22.0
+datasets==5.2.0
+accelerate==1.16.0
+
+# QLoRA (--load-4bit). Only needed on cards too small for bf16 LoRA; an
+# 80GB A100 does not need it.
+bitsandbytes==0.50.2
+
+# Fused cross-entropy. Optional -- train_lora.py falls back if absent, and
+# on sm_75 it logs a harmless Ascend-backend import error.
+liger_kernel==0.8.5
