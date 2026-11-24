@@ -29,6 +29,7 @@ import argparse
 import math
 import json
 import os
+import sys
 from pathlib import Path
 
 # Must be set before torch is imported. The first OOM left 2.66 GB reserved
@@ -41,6 +42,10 @@ DEFAULT_OUT = ROOT / "outputs" / "lora_qwen3_8b"
 
 
 def main() -> None:
+    # Piping into tee block-buffers stdout, so a loss line can sit unseen for
+    # ten minutes while the run may already be producing nan.
+    sys.stdout.reconfigure(line_buffering=True)
+
     ap = argparse.ArgumentParser(description="LoRA fine-tune for NL2Sim config generation.")
     ap.add_argument("--model", default="Qwen/Qwen3-8B")
     ap.add_argument("--data-dir", default=str(DEFAULT_DATA))
@@ -184,7 +189,8 @@ def main() -> None:
         learning_rate=args.lr,
         lr_scheduler_type="cosine",
         warmup_steps=warmup,
-        logging_steps=5,
+        logging_steps=1,
+        logging_first_step=True,
         eval_strategy="epoch",
         save_strategy="epoch",
         save_total_limit=2,
