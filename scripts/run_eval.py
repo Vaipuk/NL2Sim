@@ -30,7 +30,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
 from llm_client import resolve_provider, active_model          # noqa: E402
-from nl_to_json import generate_json                            # noqa: E402
+from nl_to_json import generate_json, normalize_shape           # noqa: E402
 from repair_orchestrator import run_all_verifications           # noqa: E402
 from eval_config_match import score as match_score              # noqa: E402
 
@@ -116,6 +116,11 @@ def run_one(name: str, text: str, outdir: Path, provider: str | None,
             row["error"] = f"no saved config at {cfg_path.name}"
             return row
         cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
+        # Saved configs predate the coercion in generate_json, so apply it here
+        # too -- and record it, since how often a fine-tune drops the nodes
+        # wrapper is the thing we are comparing adapters on.
+        row["nodes_coerced"] = isinstance(cfg.get("nodes"), dict)
+        cfg = normalize_shape(cfg)
         row["gen_s"] = None
     else:
         cfg = generate_json(text, use_context=use_context, provider=provider)

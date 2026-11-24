@@ -131,12 +131,27 @@ def generate_json(
     cleaned = extract_json_text(raw)
 
     try:
-        return json.loads(cleaned)
+        return normalize_shape(json.loads(cleaned))
     except json.JSONDecodeError as e:
         raise ValueError(
             f"LLM output could not be parsed as JSON: {e}\n\nRaw output:\n{raw}"
         )
 
+
+
+def normalize_shape(config: dict) -> dict:
+    """Wrap a bare nodes object back into the one-element list the schema asks for.
+
+    All 1000 training targets carry nodes as a list of length one, and
+    verification_layer1 rejects anything else as BLOCKING -- but a fine-tune
+    still drops the wrapper sometimes, and then every node check is skipped and
+    repair.py cannot even address nodes[0]. The contents are already correct, so
+    this restores the shape rather than repairing a value.
+    """
+    nodes = config.get("nodes")
+    if isinstance(nodes, dict):
+        config["nodes"] = [nodes]
+    return config
 
 # ============================================================
 # Helpers
